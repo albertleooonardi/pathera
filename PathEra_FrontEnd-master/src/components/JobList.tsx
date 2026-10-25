@@ -1,41 +1,48 @@
-import React, { useState } from "react";
+import React from "react";
+import { SearchX } from "lucide-react";
 import { JobType } from "@/types/JobTypes";
-import useDebounce from "@/hooks/useDebounce";
 import JobCard from "./JobCard";
 import JobSkeleton from "./JobSkeleton";
+import EmptyState from "./EmptyState";
+import { Button } from "./ui/button";
 
 interface JobListProps {
   jobs: JobType[];
   loading: boolean;
+  onClearAll?: () => void;
 }
 
-const JobList: React.FC<JobListProps> = ({ jobs, loading }) => {
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const debouncedSearch = useDebounce(searchQuery, 400);
+const JobList: React.FC<JobListProps> = ({ jobs, loading, onClearAll }) => {
   const skeletonCount = 6;
 
-  const filteredJobs = jobs.filter((job) =>
-    job.job_title.toLowerCase().includes(debouncedSearch.toLowerCase())
-  );
-
   return (
-    <div className="flex-1 p-4 bg-mariner-50 px-4">
-      <div className="mb-4">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search job..."
-          className="w-full py-2 px-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-0 focus:border-gray-300"
-        />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="pt-6">
+      {!loading && (
+        <p className="mb-4 font-mono text-xs text-muted-foreground">
+          {jobs.length} {jobs.length === 1 ? "result" : "results"}
+        </p>
+      )}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {loading
           ? Array.from({ length: skeletonCount }).map((_, index) => (
               <JobSkeleton key={index} />
             ))
-          : filteredJobs.map((job) => <JobCard key={job.id} job={job} />)}
+          : jobs.map((job) => <JobCard key={job.id} job={job} />)}
       </div>
+      {!loading && jobs.length === 0 && (
+        <EmptyState
+          icon={SearchX}
+          title="No jobs match your search"
+          description="Try a different keyword or clear some filters."
+          action={
+            onClearAll && (
+              <Button variant="outline" onClick={onClearAll}>
+                Clear search & filters
+              </Button>
+            )
+          }
+        />
+      )}
     </div>
   );
 };

@@ -1,43 +1,43 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import MainLayout from "./layout/MainLayout";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import EmptyState from "./components/EmptyState";
+import { useToaster } from "./context/ToastContext";
 import {
-  FaCheckCircle,
-  FaExternalLinkAlt,
-  FaHeart,
-  FaRegHeart,
-} from "react-icons/fa";
-import { PiDotOutlineFill } from "react-icons/pi";
-import { useNavigate, useParams } from "react-router-dom";
-import {
+  ArrowLeft,
+  SearchX,
+  Check,
+  ExternalLink,
   GraduationCap,
   BriefcaseBusiness,
   Building2,
+  Heart,
   History,
   Factory,
   MapPin,
+  X,
 } from "lucide-react";
 import useSmoothScroll from "./hooks/useSmoothScroll";
-import { formatPostDate } from "./lib/utils";
+import { cn, formatPostDate } from "./lib/utils";
 import { Button } from "./components/ui/button";
 import { JobDetailType } from "./types/JobTypes";
 import { useUser } from "./context/UserContext";
 import { BASE_URL } from "./config/settings";
 import { RawSkillMatches, SkillMatchesType } from "./types/SkillType";
-import { AiFillCloseCircle } from "react-icons/ai";
 import LoadingIcon from "./components/LoadingIcon";
+import { CompanyLogo, JobTags } from "./components/JobCard";
 
 const JobDetail: React.FC = () => {
   const { id } = useParams();
-  if (!id) {
-    return <div>Invalid Job ID</div>;
-  }
   const [user] = useUser();
   const [loading, setLoading] = useState(true);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [loadingSave, setLoadingSave] = useState(false);
   const [jobDetails, setJobDetails] = useState<JobDetailType | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const { toastError } = useToaster();
   const [skillMatches, setSkillMatches] = useState<SkillMatchesType[] | null>(
     null
   );
@@ -45,10 +45,14 @@ const JobDetail: React.FC = () => {
   useSmoothScroll();
 
   const fetchJobDetails = async () => {
+    if (!id) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const response = await axios.get(
-        `http://localhost:5005/jobs/${id}`,
+        `${BASE_URL}/jobs/${id}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -79,6 +83,7 @@ const JobDetail: React.FC = () => {
       }
     } catch (error) {
       console.error("Failed to fetch job details:", error);
+      setJobDetails(null);
     } finally {
       setLoading(false);
     }
@@ -90,7 +95,7 @@ const JobDetail: React.FC = () => {
 
   const handleWishlistClick = async () => {
     if (!user) {
-      navigate("/login");
+      navigate("/login", { state: { from: location.pathname } });
       return;
     }
     try {
@@ -98,10 +103,7 @@ const JobDetail: React.FC = () => {
       if (!isWishlisted) {
         const response = await axios.post(
           `${BASE_URL}/save-job`,
-          {
-            job_id: id,
-            user_id: user.id,
-          },
+          { job_id: id },
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -116,17 +118,19 @@ const JobDetail: React.FC = () => {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
-          data: {
-            job_id: id,
-            user_id: user.id,
-          },
+          data: { job_id: id },
         });
         if (response.status === 200) {
           setIsWishlisted(false);
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.log(error);
+      toastError(
+        isWishlisted
+          ? "Couldn't remove this job. Please try again."
+          : "Couldn't save this job. Please try again."
+      );
     } finally {
       setLoadingSave(false);
     }
@@ -143,201 +147,200 @@ const JobDetail: React.FC = () => {
 
   if (loading) {
     return (
-      <MainLayout>
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-20 z-50">
-          <LoadingIcon color="#0EA5E9" />
+      <MainLayout title="Job details">
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <LoadingIcon />
         </div>
       </MainLayout>
     );
   }
 
-  if (!jobDetails) {
-    navigate("/jobs");
-    return null;
-  }
-  return (
-    <MainLayout>
-      <div className="flex flex-grow flex-col md:flex-row bg-mariner-50 relative">
-        <div className="w-full md:w-3/4 p-5">
-          <div className="bg-white p-4 rounded-lg mb-3 shadow">
-            <div className="flex justify-between items-center mb-2">
-              <h1 className="md:text-2xl font-bold">{jobDetails.jobTitle}</h1>
-              <div className="flex gap-4">
-                <Button
-                  onClick={() =>
-                    (window.location.href = `https://www.linkedin.com/jobs/view/${id}/`)
-                  }
-                  className="bg-mariner-800 text-white px-4 py-1.5 rounded-xl font-semibold flex items-center gap-3 hover:bg-mariner-900"
-                >
-                  <p>Apply Now</p>
-                  <div className="text-xs">
-                    <FaExternalLinkAlt />
-                  </div>
+  if (!id || !jobDetails) {
+    return (
+      <MainLayout title="Job details">
+        <div className="container-page pt-10">
+          <EmptyState
+            icon={SearchX}
+            title="Job not found"
+            description="This role may have been filled or removed, or the connection failed."
+            action={
+              <>
+                <Button variant="outline" onClick={fetchJobDetails}>
+                  Try again
                 </Button>
-                <button
-                  disabled={loadingSave}
-                  onClick={handleWishlistClick}
-                  className={`text-xl border-2 border-gray rounded-xl px-2 transition-all duration-200 ease-in-out ${
-                    isWishlisted
-                      ? "text-red-700 bg-red-300 border-red-300"
-                      : "text-gray-600 bg-white border-gray-300"
-                  }`}
+                <Button onClick={() => navigate("/jobs")}>Browse jobs</Button>
+              </>
+            }
+          />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  const matchedCount = skillMatches
+    ? jobDetails.skillsRequired.filter((skill) => isSkillMatched(skill)).length
+    : 0;
+
+  const infoRows = [
+    { icon: Building2, label: "Company", value: jobDetails.companyName },
+    { icon: MapPin, label: "Location", value: jobDetails.location },
+    { icon: Factory, label: "Industry", value: jobDetails.industry },
+    { icon: GraduationCap, label: "Degree", value: jobDetails.degree },
+    {
+      icon: BriefcaseBusiness,
+      label: "Min experience",
+      value:
+        jobDetails.minExperience == -1
+          ? "None"
+          : `${jobDetails.minExperience} Years`,
+    },
+    {
+      icon: History,
+      label: "Date posted",
+      value: jobDetails.datePosted ? formatPostDate(jobDetails.datePosted) : null,
+    },
+  ].filter((row) => row.value);
+
+  return (
+    <MainLayout title="Job details">
+      <div className="container-page pt-6 sm:pt-8">
+        <button
+          onClick={() => navigate(-1)}
+          className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </button>
+
+        <div className="surface relative animate-fade-up overflow-hidden p-5 sm:p-8">
+          <div className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-sky-100 blur-3xl" />
+          <div className="relative flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+            <div className="flex items-start gap-4">
+              <CompanyLogo
+                src={jobDetails.companyImage}
+                name={jobDetails.companyName}
+                className="h-14 w-14 rounded-2xl"
+              />
+              <div className="min-w-0">
+                <h1 className="text-3xl leading-tight sm:text-5xl">
+                  {jobDetails.jobTitle}
+                </h1>
+                <p className="mt-1.5 text-[15px] text-muted-foreground">
+                  <span className="text-foreground">{jobDetails.companyName}</span>
+                  {jobDetails.location && ` · ${jobDetails.location}`}
+                </p>
+                <JobTags
+                  className="mt-4"
+                  tags={[
+                    jobDetails.jobModel,
+                    jobDetails.jobType,
+                    jobDetails.jobLevel,
+                  ]}
+                />
+              </div>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button asChild size="lg" className="flex-1 md:flex-none">
+                <a
+                  href={`https://www.linkedin.com/jobs/view/${id}/`}
+                  target="_blank"
+                  rel="noreferrer"
                 >
-                  {isWishlisted ? <FaHeart /> : <FaRegHeart />}
-                </button>
-              </div>
-            </div>
-            <div className="flex items-start">
-              {jobDetails.companyImage && (
-                <div className="h-16 w-16 mr-4">
-                  <img
-                    src={jobDetails.companyImage}
-                    alt={jobDetails.companyName}
-                    className="w-full h-full"
-                  />
-                </div>
-              )}
-              <div className="flex gap-2 flex-col justify-between">
-                <div className="flex items-center text-gray-600">
-                  <h2 className="text-md text-mariner-600">
-                    {jobDetails.companyName}
-                  </h2>
-                  <PiDotOutlineFill />
-                  <p className="text-md">{jobDetails.location}</p>
-                </div>
-                <div className="flex gap-1">
-                  {jobDetails.jobModel && (
-                    <span
-                      className={`px-3 py-1.5 rounded-md text-sm bg-purple-200 text-purple-900`}
-                    >
-                      {jobDetails.jobModel}
-                    </span>
-                  )}
-                  {jobDetails.jobType && (
-                    <span
-                      className={`px-3 py-1.5 rounded-md text-sm bg-green-200 text-green-900`}
-                    >
-                      {jobDetails.jobType}
-                    </span>
-                  )}
-                  {jobDetails.jobLevel && (
-                    <span
-                      className={`px-3 py-1.5 rounded-md text-sm bg-orange-200 text-orange-900`}
-                    >
-                      {jobDetails.jobLevel}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-lg mb-3 flex flex-col shadow">
-            <h1 className="text-xl font-bold">Skills Required</h1>
-            <div className="flex flex-wrap mt-2 gap-3 text-sm">
-              {jobDetails.skillsRequired.map((skill: string, index: number) => {
-                const isMatched = isSkillMatched(skill);
-                const skillClass = !skillMatches ? "px-2 py-2" : "p-1 pr-4";
-                const Icon = isMatched
-                  ? FaCheckCircle
-                  : skillMatches
-                  ? AiFillCloseCircle
-                  : null;
-
-                return (
-                  <div
-                    key={index}
-                    className={`border border-black flex items-center gap-2 rounded-full ${skillClass}`}
-                  >
-                    {Icon && (
-                      <Icon
-                        className={
-                          isMatched ? "text-green-600" : "text-red-600"
-                        }
-                        size={28}
-                      />
-                    )}
-                    <span>{skill}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="mb-6">
-              <h3 className="text-lg font-bold">About this role</h3>
-              <p className="text-sm text-gray-600 mt-2">
-                {jobDetails.jobDescription}
-              </p>
+                  Apply now
+                  <ExternalLink />
+                </a>
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                disabled={loadingSave}
+                onClick={handleWishlistClick}
+                aria-label={isWishlisted ? "Remove from saved" : "Save job"}
+                className={cn(
+                  "w-12 px-0",
+                  isWishlisted &&
+                    "border-destructive/40 bg-destructive/10 text-destructive hover:border-destructive/60 hover:bg-destructive/15"
+                )}
+              >
+                <Heart className={cn(isWishlisted && "fill-current")} />
+              </Button>
             </div>
           </div>
         </div>
-        <div className="w-full md:w-1/4 py-5 pr-5">
-          <div className="bg-white rounded shadow sticky top-24">
-            <div className="p-4">
-              <p className="text-lg">Job Information</p>
-            </div>
-            <div className="flex flex-col gap-4 p-4 border-t border-gray-200">
-              <div className="flex items-center gap-4">
-                <Building2 size={32} />
-                <div className="flex-1">
-                  <h6 className="mb-0 text-md lg:text-lg">Company Name: </h6>
-                  <span className="text-sm text-mariner-600">
-                    {jobDetails.companyName}
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_320px]">
+          <div className="flex min-w-0 flex-col gap-4">
+            <section className="surface p-5 sm:p-8">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-lg font-medium">Skills required</h2>
+                {skillMatches && (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    <span className="text-success">{matchedCount}</span> /{" "}
+                    {jobDetails.skillsRequired.length} matched
                   </span>
-                </div>
+                )}
               </div>
-              <div className="flex items-center gap-4">
-                <MapPin size={32} />
-                <div className="flex-1">
-                  <h6 className="mb-0 text-md lg:text-lg">Location: </h6>
-                  <span className="text-sm text-mariner-600">
-                    {jobDetails.location}
-                  </span>
-                </div>
-              </div>
-              {jobDetails.industry && (
-                <div className="flex items-center gap-4">
-                  <Factory size={32} />
-                  <div className="flex-1">
-                    <h6 className="mb-0 text-md lg:text-lg">Industry: </h6>
-                    <span className="text-sm text-mariner-600">
-                      {jobDetails.industry}
+              <div className="mt-4 flex flex-wrap gap-2">
+                {jobDetails.skillsRequired.map((skill: string, index: number) => {
+                  const isMatched = isSkillMatched(skill);
+                  const Icon = isMatched ? Check : skillMatches ? X : null;
+
+                  return (
+                    <span
+                      key={index}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm",
+                        !skillMatches && "border-border bg-muted/60",
+                        skillMatches &&
+                          isMatched &&
+                          "border-success/30 bg-success/10 text-success",
+                        skillMatches &&
+                          !isMatched &&
+                          "border-border bg-muted/60 text-muted-foreground"
+                      )}
+                    >
+                      {Icon && <Icon className="h-3.5 w-3.5" strokeWidth={2.5} />}
+                      {skill}
                     </span>
-                  </div>
-                </div>
+                  );
+                })}
+              </div>
+              {!skillMatches && (
+                <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">
+                  Want to see which of these skills you already have?{" "}
+                  <Link to="/assessment" className="font-medium text-primary hover:underline">
+                    Take the assessment
+                  </Link>
+                </p>
               )}
-              <div className="flex items-center gap-4">
-                <GraduationCap size={32} />
-                <div className="flex-1">
-                  <h6 className="mb-0 text-md lg:text-lg">Degree: </h6>
-                  <span className="text-sm text-mariner-600">
-                    {jobDetails.degree}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <BriefcaseBusiness size={32} />
-                <div className="flex-1">
-                  <h6 className="mb-0 text-md lg:text-lg">Min Experience: </h6>
-                  <span className="text-sm text-mariner-600">
-                    {jobDetails.minExperience == -1
-                      ? "None"
-                      : `${jobDetails.minExperience} Years`}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <History size={32} />
-                <div className="flex-1">
-                  <h6 className="mb-0 text-md lg:text-lg">Date Posted: </h6>
-                  <span className="text-sm text-mariner-600">
-                    {formatPostDate(jobDetails.createdAt)}
-                  </span>
-                </div>
-              </div>
-            </div>
+            </section>
+
+            <section className="surface p-5 sm:p-8">
+              <h2 className="text-lg font-medium">About this role</h2>
+              <p className="mt-4 whitespace-pre-line text-[15px] leading-relaxed text-muted-foreground">
+                {jobDetails.jobDescription}
+              </p>
+            </section>
           </div>
+
+          <aside className="lg:sticky lg:top-16 lg:self-start">
+            <div className="surface p-5 sm:p-6">
+              <p className="eyebrow">Job information</p>
+              <dl className="mt-5 flex flex-col gap-5">
+                {infoRows.map((row) => (
+                  <div key={row.label} className="flex items-start gap-3.5">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/60 text-muted-foreground">
+                      <row.icon size={16} />
+                    </span>
+                    <div className="min-w-0">
+                      <dt className="text-xs text-muted-foreground">{row.label}</dt>
+                      <dd className="mt-0.5 break-words text-sm">{row.value}</dd>
+                    </div>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </aside>
         </div>
       </div>
     </MainLayout>

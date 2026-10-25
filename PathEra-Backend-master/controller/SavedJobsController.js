@@ -4,10 +4,16 @@ import Companies from "../model/Companies.js";
 
 export const saveJob = async (req, res) => {
   try {
-    const { job_id, user_id } = req.body;
+    const { job_id } = req.body;
+    // the owner is the signed-in user, never a user_id sent by the client
+    const user_id = req.user.id;
 
-    if (!job_id || !user_id) {
-      return res.status(400).json({ error: "job_id and user_id are required" });
+    if (!Number.isSafeInteger(Number(job_id)) || Number(job_id) <= 0) {
+      return res.status(400).json({ error: "A valid job_id is required" });
+    }
+
+    if (!(await Jobs.findByPk(job_id, { attributes: ["id"] }))) {
+      return res.status(404).json({ error: "Job not found" });
     }
 
     const existingSave = await SavedJobs.findOne({
@@ -24,7 +30,8 @@ export const saveJob = async (req, res) => {
 
     res.status(201).json(savedJob);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Error saving job:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
@@ -54,19 +61,20 @@ export const showSavedJobs = async (req, res) => {
       ],
     });
 
-    if (savedJobs.length === 0) {
-      return res.status(404).json({ message: "No saved jobs found." });
-    }
-
+    // an empty list is a normal state, not an error, so the page can show its empty state
     return res.status(200).json(savedJobs);
   } catch (error) {
     console.error("Error fetching saved jobs:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
 export const showWishlistedJobs = async (req, res) => {
   const { userId } = req.params;
+
+  if (Number(userId) !== req.user.id) {
+    return res.status(403).json({ error: "You can only view your own saved jobs." });
+  }
 
   try {
     // Fetch all jobs
@@ -101,7 +109,12 @@ export const showWishlistedJobs = async (req, res) => {
 
 
 export const removeSavedJob = async (req, res) => {
-  const { job_id, user_id } = req.body;
+  const { job_id } = req.body;
+  const user_id = req.user.id;
+
+  if (!Number.isSafeInteger(Number(job_id)) || Number(job_id) <= 0) {
+    return res.status(400).json({ error: "A valid job_id is required" });
+  }
 
   try {
     const result = await SavedJobs.destroy({

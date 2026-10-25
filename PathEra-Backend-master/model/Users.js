@@ -22,7 +22,7 @@ const Users = db.define(
       type: DataTypes.INTEGER,
     },
     token: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
       allowNull: true,
     },
   },

@@ -2,25 +2,38 @@ import Users from "../model/Users.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
+// Never send the password hash or session token back to the client
+const PUBLIC_ATTRIBUTES = [
+  "id",
+  "name",
+  "email",
+  "degree",
+  "years_of_experience",
+  "createdAt",
+  "updatedAt",
+];
+
+const toPublicUser = (user) =>
+  Object.fromEntries(PUBLIC_ATTRIBUTES.map((key) => [key, user[key]]));
+
 class UserController {
   static async register(req, res) {
     try {
       const { name, email, password, confirm_password } = req.body;
       const errors = {};
-      const existingUser = await Users.findOne({ where: { email } });
-      if (!name) {
+      if (typeof name !== "string" || !name.trim()) {
         errors.name = "Name is required!";
-      } else if (name.length < 3) {
+      } else if (name.trim().length < 3) {
         errors.name = "Name must be at least 3 characters!";
       }
-      if (!email) {
+      if (typeof email !== "string" || !email) {
         errors.email = "Email is required!";
-      } else if (!/\S+@\S+\.\S+/.test(email)) {
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         errors.email = "Email is in an invalid format!";
-      } else if (existingUser) {
+      } else if (await Users.findOne({ where: { email } })) {
         errors.email = "Email already exists!";
       }
-      if (!password) {
+      if (typeof password !== "string" || !password) {
         errors.password = "Password is required!";
       } else if (password.length < 8) {
         errors.password = "Password must be at least 8 characters!";
@@ -30,20 +43,20 @@ class UserController {
       }
 
       if (Object.keys(errors).length > 0) {
-        console.log(errors);
         return res.status(400).json({ errors });
       }
 
-      const hashedPassword = await bcrypt.hash(password, 8);
+      const hashedPassword = await bcrypt.hash(password, 10);
       const user = await Users.create({
-        name,
+        name: name.trim(),
         email,
         password: hashedPassword,
       });
 
-      return res.status(201).json(user);
+      return res.status(201).json(toPublicUser(user));
     } catch (error) {
-      return res.status(500).json({ message: error.message });
+      console.error("Error in register:", error);
+      return res.status(500).json({ message: "Internal Server Error" });
     }
   }
 
@@ -53,24 +66,21 @@ class UserController {
 
       const errors = {};
 
-      if (!email) errors.email = "Email is required!";
-      if (!password) errors.password = "Password is required!";
-
-      const user = await Users.findOne({ where: { email } });
-
-      if (!user) {
-        errors.email = "Email not found!";
-      }
+      if (typeof email !== "string" || !email) errors.email = "Email is required!";
+      if (typeof password !== "string" || !password)
+        errors.password = "Password is required!";
 
       if (Object.keys(errors).length > 0) {
         return res.status(400).json({ errors });
       }
 
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch) {
+      const user = await Users.findOne({ where: { email } });
+
+      // Same message for an unknown email and a wrong password, so accounts can't be enumerated
+      if (!user || !(await bcrypt.compare(password, user.password))) {
         return res
           .status(400)
-          .json({ errors: { password: "Password is incorrect!" } });
+          .json({ errors: { password: "Email or password is incorrect!" } });
       }
 
       const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
@@ -86,49 +96,32 @@ class UserController {
     }
   }
 
+  // Runs behind checkToken, so req.user is a verified, unexpired session
   static async auth(req, res) {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader) {
-        return res
-          .status(401)
-          .json({ message: "Authorization header missing" });
-      }
-
-      const token = authHeader.split(" ")[1];
-      const user = await Users.findOne({ where: { token } });
+      const user = await Users.findByPk(req.user.id, {
+        attributes: PUBLIC_ATTRIBUTES,
+      });
 
       if (!user) {
-        return res.status(400).json({ message: "Invalid token!" });
+        return res.status(401).json({ message: "Invalid token!" });
       }
 
       res.status(200).json(user);
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      console.error("Error in auth:", error);
+      res.status(500).json({ message: "Internal Server Error" });
     }
   }
 
   static async logout(req, res) {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader) {
-        return res
-          .status(401)
-          .json({ message: "Authorization header missing" });
-      }
-
-      const token = authHeader.split(" ")[1];
-      const user = await Users.findOne({ where: { token } });
-
-      if (!user) {
-        return res.status(400).json({ message: "Invalid token!" });
-      }
-
-      await Users.update({ token: null }, { where: { id: user.id } });
+      await Users.update({ token: null }, { where: { id: req.user.id } });
 
       return res.status(200).json({ message: "Logged out successfully" });
     } catch (error) {
-      return res.status(500).json({ message: error.message });
+      console.error("Error in logout:", error);
+      return res.status(500).json({ message: "Internal Server Error" });
     }
   }
 }

@@ -8,7 +8,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "./components/ui/accordion";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, RotateCcw } from "lucide-react";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { BASE_URL } from "./config/settings";
@@ -19,7 +19,9 @@ import {
 import { useToaster } from "./context/ToastContext";
 import { useNavigate } from "react-router-dom";
 import { Button } from "./components/ui/button";
-import { getScoreColor } from "./lib/utils";
+import { formatPostDate, getScoreColor } from "./lib/utils";
+import PageHeader from "./components/PageHeader";
+import ScoreRing from "./components/ScoreRing";
 
 const Results = () => {
   const { id } = useParams();
@@ -30,6 +32,8 @@ const Results = () => {
   const { toastError } = useToaster();
 
   useEffect(() => {
+    // Ignore a stale response, so a double-run effect (StrictMode) or a quick id change can't toast twice
+    let ignore = false;
     const fetchData = async () => {
       try {
         const response = await axios.get(`${BASE_URL}/get-session/${id}`, {
@@ -37,7 +41,7 @@ const Results = () => {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
         });
-        if (response.status === 200) {
+        if (!ignore && response.status === 200) {
           setSession({
             id: response.data.id,
             user_id: response.data.userId,
@@ -47,105 +51,133 @@ const Results = () => {
           });
           setAnswers(response.data.answers);
         }
-        console.log(response.data);
-      } catch (error: any) {
-        if (error.response.status === 404) {
-          toastError("Session not found");
-        } else if (error.response.status === 403) {
-          navigate("/");
-          toastError("Unauthorized");
+      } catch (error: unknown) {
+        if (ignore) return;
+        const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+        if (status === 404) {
+          toastError("We couldn't find that practice session.");
+        } else if (status === 403) {
+          navigate("/history");
+          toastError("That practice session belongs to another account.");
         } else {
           toastError("An error occurred. Please try again later");
         }
       } finally {
-        setLoading(false);
+        if (!ignore) setLoading(false);
       }
     };
     fetchData();
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   useSmoothScroll();
 
   return (
-    <MainLayout>
-      <br />
-      <br />
-      <div className="py-6 px-4 md:px-12 lg:px-24">
-        <div className="flex flex-col gap-6 px-4 md:px-8 lg:px-12 py-8 border border-primary rounded-xl shadow-custom-blue">
-          {session && (
-            <p className="text-center md:text-start text-xl md:text-2xl font-bold px-8">
-              {`${session?.job_title} Interview Results`}
-            </p>
-          )}
+    <MainLayout title="Results" size="narrow">
+      <div className="container-page">
+        <PageHeader
+          eyebrow="Interview results"
+          title={session ? session.job_title : "Results"}
+          description="Expand any question to compare your answer with the sample answer."
+          actions={
+            <Button variant="outline" size="sm" onClick={() => navigate("/interview")}>
+              <RotateCcw />
+              Practice again
+            </Button>
+          }
+        />
 
-          {loading ? (
-            <div className="w-full px-4 md:px-6 lg:px-8">
-              <Skeleton className="h-6 w-1/2 mb-4" />
-              <Skeleton className="h-6 w-full mb-4" />
-              <Skeleton className="h-6 w-full mb-4" />
-              <Skeleton className="h-6 w-full mb-4" />
+        {!loading && !session ? (
+          <div className="flex flex-col items-center rounded-2xl border border-dashed border-border px-6 py-16 text-center">
+            <p className="font-display text-2xl">Results unavailable</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              This session couldn't be loaded. It may have been removed.
+            </p>
+            <div className="mt-6 flex gap-2">
+              <Button variant="outline" onClick={() => navigate("/history")}>
+                View history
+              </Button>
+              <Button onClick={() => navigate("/interview")}>Start practicing</Button>
             </div>
-          ) : (
-            <Accordion
-              type="single"
-              collapsible
-              className="w-full px-4 md:px-6 lg:px-8"
-            >
-              <AccordionItem value="item-0" className="px-0 md:px-4">
-                <AccordionTrigger className="flex justify-between gap-2">
-                  <p className="text-lg md:text-xl text-primary font-bold">
-                    Questions
+          </div>
+        ) : loading ? (
+          <div className="surface flex flex-col gap-4 p-6">
+            <Skeleton className="h-16 w-1/2" />
+            <Skeleton className="h-5 w-full" />
+            <Skeleton className="h-5 w-full" />
+            <Skeleton className="h-5 w-3/4" />
+          </div>
+        ) : (
+          <div className="flex animate-fade-up flex-col gap-4">
+            {session && (
+              <div className="surface relative flex items-center gap-5 overflow-hidden p-5 sm:gap-6 sm:p-8">
+                <div className="pointer-events-none absolute -left-10 -top-16 h-48 w-48 rounded-full bg-sky-100 blur-3xl" />
+                <ScoreRing
+                  value={Number(session.average_score)}
+                  size={88}
+                  stroke={6}
+                  className="relative"
+                />
+                <div className="relative min-w-0">
+                  <p className="eyebrow">Average score</p>
+                  <p className="mt-1 font-display text-4xl sm:text-5xl">
+                    {Number(session.average_score).toFixed(0)}
+                    <span className="text-lg text-muted-foreground">/100</span>
                   </p>
-                  <p className="text-lg md:text-xl text-primary font-bold">
-                    Score
+                  <p className="mt-1 font-mono text-xs text-muted-foreground">
+                    {answers?.length ?? 0} questions · {formatPostDate(session.createdAt)}
                   </p>
-                </AccordionTrigger>
-              </AccordionItem>
+                </div>
+              </div>
+            )}
+
+            <Accordion type="single" collapsible className="surface overflow-hidden">
               {answers &&
                 answers.map((answer, index) => (
                   <AccordionItem
                     value={`item-${index}`}
-                    className="px-0 md:px-4"
+                    className="border-border last:border-b-0"
                     key={index}
                   >
-                    <AccordionTrigger className="flex justify-between gap-4">
-                      <p className="text-sm md:text-lg text-start">
-                        {`${index + 1}. ${answer.question}`}
-                      </p>
-                      <div className="flex items-center gap-2 md:gap-4 lg:gap-8">
-                        <p
-                          className={`text-sm md:text-lg lg:text-xl font-bold ${getScoreColor(
+                    <AccordionTrigger className="gap-4 px-5 py-5 text-left hover:bg-muted sm:px-6">
+                      <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+                        <span className="mt-0.5 font-mono text-xs text-muted-foreground">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                        <p className="text-sm font-normal leading-relaxed sm:text-[15px]">
+                          {answer.question}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span
+                          className={`font-mono text-sm font-medium ${getScoreColor(
                             answer.score
                           )}`}
                         >
                           {`${answer.score}%`}
-                        </p>
-                        <ChevronDown className="h-6 w-6 shrink-0 transition-transform duration-200" />
+                        </span>
+                        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200" />
                       </div>
                     </AccordionTrigger>
-                    <AccordionContent className="px-1 md:px-4 lg:px-8">
-                      <p className="font-bold text-sm sm:text-lg md:text-xl">
-                        Your answer
-                      </p>
-                      <p className="mt-1 sm:mt-2">{answer.answer}</p>
-                      <p className="font-bold text-sm sm:text-lg md:text-xl mt-4">
-                        Sample Answer
-                      </p>
-                      <p className="mt-2">{answer.sampleAnswer}</p>
+                    <AccordionContent className="grid gap-3 px-5 pb-6 sm:grid-cols-2 sm:px-6">
+                      <div className="rounded-xl border border-primary/20 bg-primary/[0.05] p-4">
+                        <p className="eyebrow mb-2 text-primary/80">Your answer</p>
+                        <p className="leading-relaxed">{answer.answer}</p>
+                      </div>
+                      <div className="rounded-xl border border-border bg-muted/60 p-4">
+                        <p className="eyebrow mb-2">Sample answer</p>
+                        <p className="leading-relaxed text-muted-foreground">
+                          {answer.sampleAnswer}
+                        </p>
+                      </div>
                     </AccordionContent>
                   </AccordionItem>
                 ))}
             </Accordion>
-          )}
-          <div className="flex w-full justify-center">
-            <Button
-              className="w-48 transition-all duration-300 active:scale-95 shadow-md hover:shadow-lg focus:outline-none"
-              onClick={() => navigate("/interview")}
-            >
-              Practice Again
-            </Button>
           </div>
-        </div>
+        )}
       </div>
     </MainLayout>
   );

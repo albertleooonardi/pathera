@@ -7,29 +7,34 @@ import {
   ToastViewport,
 } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
-import { AiFillCloseCircle } from "react-icons/ai"; // Example icon for error
+import { AlertCircle } from "lucide-react";
 
 export function Toaster() {
   const { toasts } = useToast();
 
   return (
     <ToastProvider>
+      {/* `action` is pulled out so it isn't spread onto the DOM element. */}
+      {/* eslint-disable-next-line @typescript-eslint/no-unused-vars */}
       {toasts.map(({ id, title, description, action, ...props }) => (
         <Toast
           key={id}
           {...props}
-          className="flex items-center border border-gray-200 rounded-lg shadow-lg"
+          className="flex items-center gap-3 rounded-2xl p-3 pr-10"
         >
-          <div className="flex items-center justify-center bg-red-500 text-white h-full p-2 rounded-full">
-            <AiFillCloseCircle size={24} />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-destructive/15 text-destructive">
+            <AlertCircle size={18} />
           </div>
-          <div className="grid gap-1 p-3">
-            {title && <ToastTitle className="font-bold">{title}</ToastTitle>}
-            {description && <ToastDescription>{description}</ToastDescription>}
+          <div className="grid gap-0.5">
+            {title && <ToastTitle className="font-medium">{title}</ToastTitle>}
+            {description && (
+              <ToastDescription className="text-muted-foreground">
+                {description}
+              </ToastDescription>
+            )}
           </div>
-          <ToastClose className="ml-auto mr-2 text-gray-500 hover:text-gray-700">
-            <AiFillCloseCircle size={20} />
-          </ToastClose>
+          <ToastClose />
+
         </Toast>
       ))}
       <ToastViewport />

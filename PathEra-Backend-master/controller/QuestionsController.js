@@ -1,6 +1,6 @@
 import Questions from "../model/Questions.js";
 import AnswerKey from "../model/AnswerKey.js";
-import { Sequelize } from "sequelize";
+import db from "../Database.js";
 
 export const getQuestions = async (req, res) => {
   try {
@@ -17,7 +17,7 @@ export const getQuestions = async (req, res) => {
           limit: 1,
         },
       ],
-      order: Sequelize.literal("RAND()"), 
+      order: db.random(),
       limit: 10,
     });
 
@@ -33,6 +33,6 @@ export const getQuestions = async (req, res) => {
     return res.status(200).json(formattedQuestions);
   } catch (error) {
     console.error("Error fetching questions:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };

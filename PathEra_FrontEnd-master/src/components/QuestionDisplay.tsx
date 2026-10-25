@@ -1,7 +1,7 @@
 import React from "react";
-import InterviewerIcon from "../assets/InterviewerIcon.png";
 import { Skeleton } from "./ui/skeleton";
 import { QuestionType } from "../types/QuestionType";
+import AiAvatar from "./AiAvatar";
 
 interface QuestionDisplayProps {
   question?: QuestionType;
@@ -12,29 +12,33 @@ const QuestionDisplay: React.FC<QuestionDisplayProps> = ({
   question,
   loading,
 }) => {
-  return (
-    <div className="flex flex-col md:flex-row gap-4 items-start max-w-full">
-      {question ? (
-        <div className="flex flex-grow items-start">
-          <img
-            src={InterviewerIcon}
-            className="w-8 md:w-10 lg:w-12"
-            alt="Interviewer"
-          />
-          <div className="ml-4 bg-gray-100 p-3 md:p-4 rounded-lg">
-            <p className="text-sm md:text-lg">{question.question}</p>
-          </div>
+  if (question) {
+    return (
+      <div key={question.id} className="flex animate-fade-up items-start gap-3">
+        <AiAvatar />
+        <div className="max-w-[85%] rounded-2xl rounded-tl-md border border-border bg-muted/60 px-4 py-3 sm:px-5 sm:py-4">
+          <p className="eyebrow mb-1.5">Interviewer</p>
+          <p className="text-[15px] leading-relaxed sm:text-base">
+            {question.question}
+          </p>
         </div>
-      ) : (
-        loading && (
-          <div className="flex flex-grow items-start">
-            <Skeleton className="w-8 md:w-10 lg:w-12 rounded-full" />
-            <Skeleton className="ml-4 w-full h-4 md:h-5 lg:h-6" />
-          </div>
-        )
-      )}
-    </div>
-  );
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-9 w-9 rounded-full" />
+        <div className="flex-1 space-y-2 pt-1">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 };
 
 export default QuestionDisplay;

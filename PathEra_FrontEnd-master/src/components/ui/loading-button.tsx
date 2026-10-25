@@ -1,16 +1,26 @@
-import { Button } from "./button";
-import { AiOutlineLoading3Quarters } from "react-icons/ai";
+import { Loader2 } from "lucide-react";
+import { Button, ButtonProps } from "./button";
 
 const LoadingButton = ({
   className = "",
   text = "Loading...",
+  variant,
+  size,
 }: {
   className?: string;
   text?: string;
+  variant?: ButtonProps["variant"];
+  size?: ButtonProps["size"];
 }) => {
   return (
-    <Button className={"flex gap-2 items-center " + className}>
-      <AiOutlineLoading3Quarters className="animate-spin w-5 h-5" />
+    <Button
+      disabled
+      variant={variant}
+      size={size}
+      className={className}
+      aria-busy="true"
+    >
+      <Loader2 className="animate-spin" />
       {text}
     </Button>
   );

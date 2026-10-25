@@ -10,21 +10,36 @@ class JobRecommender:
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"The file {file_path} was not found.")
         self.data = pd.read_csv(file_path)
-        self.data = self.data.head(250)
+        # the preprocessor writes inf when an experience phrase had no number; that means "unknown", not "infinite"
+        self.data['min_experience'] = self.data['min_experience'].replace([np.inf, -np.inf], np.nan)
         self.load_model()
 
     def load_model(self):
         self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        # Job titles and skills never change between requests, so embed them once up front instead of
+        # re-encoding every job on every /recommend call (which is why only 250 jobs used to be scored)
+        self.embedding_cache = {}
+        job_titles = self.data['job_title'].str.lower().str.strip().tolist()
+        job_skills = [skill.strip() for skills in self.data['skills'].dropna() for skill in skills.lower().split(",")]
+        self.encode(job_titles + job_skills)
+
+    def encode(self, texts):
+        missing = [text for text in dict.fromkeys(texts) if text not in self.embedding_cache]
+        if missing:
+            for text, embedding in zip(missing, self.model.encode(missing)):
+                self.embedding_cache[text] = embedding
+        return np.array([self.embedding_cache[text] for text in texts])
 
     def calculate_title_similarity(self, job_title, user_titles):
-        job_title = job_title.lower()
-        user_titles = user_titles.lower().split(",")
-        concat = [job_title] + user_titles
-        embeddings = self.model.encode(concat)
+        job_title = job_title.lower().strip()
+        user_titles = [title.strip() for title in user_titles.lower().split(",") if title.strip()]
+        if not user_titles:
+            return 0
+        embeddings = self.encode([job_title] + user_titles)
         job_title_embedding = embeddings[0]
         user_embeddings = embeddings[1:]
         similarities = cosine_similarity([job_title_embedding], user_embeddings)[0]
-        return max(similarities) * 100
+        return float(max(similarities)) * 100
 
     def calculate_skill_similarity(self, job_skills, user_skills):
         if pd.isna(job_skills) or job_skills.strip() == "":
@@ -36,30 +51,29 @@ class JobRecommender:
         user_skills = user_skills.lower().split(",")
         
         job_skills = [skill.strip() for skill in job_skills]
-        user_skills = [skill.strip() for skill in user_skills]
-        
-        concat = job_skills + user_skills
-        embeddings = self.model.encode(concat)
-        job_embeddings = embeddings[:len(job_skills)]
-        user_embeddings = embeddings[len(job_skills):]
-        
+        user_skills = [skill.strip() for skill in user_skills if skill.strip()]
+        if not user_skills:
+            return 0, None
+
+        job_embeddings = self.encode(job_skills)
+        user_embeddings = self.encode(user_skills)
+
         matches = []
         score = 0
 
         for i in range(len(job_skills)):
-            if i < len(user_skills) and job_skills[i] == user_skills[i]:
+            if job_skills[i] in user_skills:
                 score += 1
-                matches.append({"matched_skill": job_skills[i], "user_skill": user_skills[i], "similarity": 100})
+                matches.append({"matched_skill": job_skills[i], "user_skill": job_skills[i], "similarity": 100})
             else:
                 similarities = cosine_similarity([job_embeddings[i]], user_embeddings)[0]
-                max_similarity = max(similarities)
-                max_index = np.argmax(similarities)
-                
+                max_similarity = float(max(similarities))
+                max_index = int(np.argmax(similarities))
+
                 if max_similarity > 0.4:
-                    matched_user_skill = user_skills[max_index] if max_index < len(user_skills) else None
                     matches.append({
-                        "matched_skill": job_skills[i], 
-                        "user_skill": matched_user_skill, 
+                        "matched_skill": job_skills[i],
+                        "user_skill": user_skills[max_index],
                         "similarity": round(max_similarity * 100, 3)
                     })
                     score += max_similarity
@@ -88,7 +102,8 @@ class JobRecommender:
                 min_degree = min(min_degree, 2)
             elif 'phd' in d or 'doctorate' in d:
                 min_degree = min(min_degree, 3)
-        return min_degree
+        # nothing recognised (e.g. "Not Specified") must not rank above a PhD
+        return None if min_degree == 4 else min_degree
 
     def calculate_degree_similarity(self, job_degree, user_degree):
         user_degree = self.get_degree_value(user_degree)
@@ -104,6 +119,7 @@ class JobRecommender:
     def calculate_experience_similarity(self, job_experience, user_experience):
         if pd.isna(job_experience):
             return -1
+        user_experience = pd.to_numeric(user_experience, errors='coerce')
         if pd.isna(user_experience):
             return 0
         if job_experience <= user_experience:
@@ -111,10 +127,11 @@ class JobRecommender:
         return 0
 
     def calculate_overall_score(self, title_score, skill_score, degree_score, experience_score):
+        # -1 means the job doesn't state that requirement, so its weight moves to the other scores
         if experience_score == -1 and degree_score == -1:
-            return (skill_score * 0.5) + (experience_score * 0.5)
+            return (title_score * 0.5) + (skill_score * 0.5)
         elif experience_score == -1:
-            return (skill_score * 0.45) + (experience_score * 0.45) + (degree_score * 0.1)
+            return (title_score * 0.45) + (skill_score * 0.45) + (degree_score * 0.1)
         elif degree_score == -1:
             return (title_score * 0.40) + (skill_score * 0.40) + (experience_score * 0.2)
         return (title_score * 0.40) + (skill_score * 0.40) + (degree_score * 0.05) + (experience_score * 0.15)
@@ -133,7 +150,6 @@ class JobRecommender:
         for i in range(len(self.data)):
             job = self.data.iloc[i]
             self.match_ids.append(i)
-            print(f"Processing job {i + 1}/{len(self.data)}")
             self.job_ids.append(job['job_id'])
             
             title_score = self.calculate_title_similarity(job['job_title'], user_data['job_title'].iloc[0])

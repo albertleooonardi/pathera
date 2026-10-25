@@ -7,9 +7,9 @@ interface StatisticsCardProps {
 
 const StatisticsCard: React.FC<StatisticsCardProps> = ({ title, value }) => {
   return (
-    <div className="flex justify-center flex-col text-center py-4 md:py-0">
-      <p className="font-medium text-l">{title}</p>
-      <p className="font-bold text-xl">{value}</p>
+    <div className="flex flex-col gap-1 bg-white px-5 py-5 sm:px-6">
+      <p className="font-display text-3xl tracking-tight sm:text-4xl">{value}</p>
+      <p className="eyebrow">{title}</p>
     </div>
   );
 };

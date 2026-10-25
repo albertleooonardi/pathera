@@ -20,7 +20,7 @@ const AnswerDetails = db.define(
       allowNull: false,
     },
     answer: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
       allowNull: false,
     },
     feedback: {

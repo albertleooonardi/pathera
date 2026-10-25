@@ -1,73 +1,103 @@
 import React from "react";
+import { Link } from "react-router-dom";
+import { ArrowUpRight, MapPin } from "lucide-react";
 import { JobType } from "@/types/JobTypes";
-import { formatPostDate } from "@/lib/utils";
-import { Button } from "./ui/button";
-import { useNavigate } from "react-router-dom";
+import { cn, formatPostDate } from "@/lib/utils";
 
 interface JobCardProps {
   job: JobType;
   className?: string;
 }
 
-const JobCard: React.FC<JobCardProps> = ({ job, className = "" }) => {
-  const navigate = useNavigate();
-
-  return (
+export const CompanyLogo = ({
+  src,
+  name,
+  className = "",
+}: {
+  src?: string;
+  name: string;
+  className?: string;
+}) =>
+  src ? (
+    <img
+      src={src}
+      alt={name}
+      className={cn(
+        "h-11 w-11 shrink-0 rounded-xl bg-white object-contain p-1.5",
+        className
+      )}
+    />
+  ) : (
     <div
-      className={`border border-gray-200 rounded-lg shadow-md p-4 w-full bg-white flex flex-col gap-2 justify-between ${className}`}
+      className={cn(
+        "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/60 font-display text-sm font-semibold text-muted-foreground",
+        className
+      )}
     >
-      <div className="flex flex-col">
-        <div className="flex items-start mb-2 gap-3">
-          {job.companyId.company_image ? (
-            <img
-              src={job.companyId.company_image}
-              alt={job.companyId.company_name}
-              className="w-12 h-12"
-            />
-          ) : (
-            <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
-          )}
-          <div className="w-0 flex-1">
-            <h2 className="text-md font-semibold line-clamp-2">
-              {job.job_title}
-            </h2>
-            <p className="text-gray-500 text-sm overflow-hidden whitespace-nowrap text-ellipsis">
-              {job.companyId.company_name}
-              {job.location ? ` • ${job.location.split(",")[0]}` : ""}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
-          {job.job_model && (
-            <span className="bg-purple-200 text-purple-700 text-xs font-medium px-2 py-1 rounded-lg">
-              {job.job_model}
-            </span>
-          )}
-          {job.job_type && (
-            <span className="bg-green-200 text-green-700 text-xs font-medium px-2 py-1 rounded-lg">
-              {job.job_type}
-            </span>
-          )}
-          {job.job_level && (
-            <span className="bg-orange-200 text-orange-700 text-xs font-medium px-2 py-1 rounded-lg">
-              {job.job_level}
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="flex items-end justify-between mt-auto">
-        <p className="text-gray-500 text-sm">
-          Posted {formatPostDate(job.createdAt)}
-        </p>
-        <Button
-          onClick={() => navigate(`/jobdetail/${job.id}`)}
-          className="px-4 py-0 hover:bg-primary/70"
-        >
-          View Details
-        </Button>
-      </div>
+      {name?.charAt(0) || "?"}
     </div>
+  );
+
+export const JobTags = ({
+  tags,
+  className = "",
+}: {
+  tags: (string | undefined | null)[];
+  className?: string;
+}) => (
+  <div className={cn("flex flex-wrap gap-1.5", className)}>
+    {/* job_type and job_level can both be e.g. "Internship"; show it once (tags double as keys) */}
+    {[...new Set(tags.filter(Boolean))].map((tag) => (
+      <span key={tag} className="chip">
+        {tag}
+      </span>
+    ))}
+  </div>
+);
+
+const JobCard: React.FC<JobCardProps> = ({ job, className = "" }) => {
+  return (
+    <Link
+      to={`/jobdetail/${job.id}`}
+      className={cn(
+        "surface surface-interactive group flex h-full w-full flex-col gap-5 p-5",
+        className
+      )}
+    >
+      <div className="flex items-start gap-3.5">
+        <CompanyLogo
+          src={job.companyId.company_image}
+          name={job.companyId.company_name}
+        />
+        <div className="min-w-0 flex-1">
+          <h3 className="line-clamp-2 font-sans text-[15px] font-medium leading-snug text-foreground">
+            {job.job_title}
+          </h3>
+          <p className="mt-1 truncate text-sm text-muted-foreground">
+            {job.companyId.company_name}
+          </p>
+        </div>
+        <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary" />
+      </div>
+
+      <JobTags tags={[job.job_model, job.job_type, job.job_level]} />
+
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-border/70 pt-4 text-xs text-muted-foreground">
+        {job.location ? (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{job.location.split(",")[0]}</span>
+          </span>
+        ) : (
+          <span />
+        )}
+        {job.date_posted && (
+          <span className="shrink-0 font-mono">
+            {formatPostDate(job.date_posted)}
+          </span>
+        )}
+      </div>
+    </Link>
   );
 };
 

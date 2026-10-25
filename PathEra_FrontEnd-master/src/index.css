@@ -3,94 +3,167 @@
 @tailwind utilities;
 
 @layer base {
+  /* Original PathEra palette: white surfaces, sky-blue primary, mariner blues. */
   :root {
     --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
+    --popover-foreground: 222 47% 11%;
 
     --primary: 199 89% 48%;
-    --primary-foreground: 0 0% 98%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 98%;
-    --secondary-foreground: 0 0% 9%;
+    --secondary: 210 40% 98%;
+    --secondary-foreground: 222 47% 11%;
 
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
+    --muted: 210 33% 96%;
+    --muted-foreground: 215 16% 47%;
 
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    --success: 142 71% 40%;
+    --warning: 43 100% 45%;
+    --violet: 258 90% 66%;
 
-    --radius: 0.5rem;
+    --border: 214 25% 90%;
+    --input: 214 25% 86%;
+    --ring: 199 89% 48%;
+
+    --radius: 0.75rem;
   }
 
-  .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-  }
-}
-
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 5px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #555;
-}
-
-@layer base {
   * {
-    @apply font-mono;
     @apply border-border;
   }
-  body {
-    @apply bg-background text-foreground;
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
   }
+
+  /* Desktop "wallpaper" built from the original hero gradient (violet-200 → sky-200). */
+  body {
+    @apply font-sans text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    background-color: #e4e9fb;
+    background-image: radial-gradient(
+        ellipse 60% 50% at 15% 0%,
+        rgba(255, 255, 255, 0.7),
+        transparent 70%
+      ),
+      radial-gradient(ellipse 50% 60% at 100% 100%, rgba(186, 230, 253, 0.9), transparent 70%),
+      linear-gradient(120deg, #ddd6fe 0%, #c7d2fe 45%, #bae6fd 100%);
+    background-attachment: fixed;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display font-normal tracking-tight;
+  }
+
+  /* Visible keyboard focus everywhere (mouse clicks stay clean). */
+  a:focus-visible,
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  [role="tab"]:focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.2);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(29, 43, 78, 0.2);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+@layer components {
+  /* Content gutters inside a window. */
+  .container-page {
+    @apply mx-auto w-full px-5 pb-10 sm:px-8 sm:pb-12 lg:px-12;
+  }
+
+  .window {
+    @apply relative overflow-clip rounded-2xl border border-white/70 bg-card shadow-window;
+  }
+
+  .window-titlebar {
+    @apply relative flex h-11 items-center border-b border-border/80 bg-muted/70 px-4;
+  }
+
+  .widget {
+    @apply rounded-2xl border border-white/70 bg-white/85 p-4 shadow-widget backdrop-blur-xl;
+  }
+
+  .surface {
+    @apply rounded-2xl border border-border bg-card;
+  }
+
+  .surface-interactive {
+    @apply transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg hover:shadow-mariner-900/5;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-muted/60 px-2.5 py-1 text-xs font-medium text-foreground/70;
+  }
+
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary to-violet bg-clip-text text-transparent;
+  }
+
+  .field-label {
+    @apply mb-2 block text-sm font-medium text-foreground;
+  }
+
+  .link-underline {
+    @apply inline-flex items-center gap-2 border-b border-foreground/70 pb-1 text-sm font-medium text-foreground transition-colors hover:border-primary hover:text-primary;
+  }
+
+  .bg-grid {
+    background-image: linear-gradient(
+        to right,
+        hsl(var(--foreground) / 0.05) 1px,
+        transparent 1px
+      ),
+      linear-gradient(to bottom, hsl(var(--foreground) / 0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse 70% 70% at 50% 40%, #000 30%, transparent 100%);
+  }
+}
+
+@layer utilities {
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
@@ -98,22 +171,29 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  .scroll-smooth {
-    scroll-behavior: smooth;
-  }
+}
 
-  @keyframes slideUp {
-    from {
-      transform: translateY(30px);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
-  }
+/* Toasts sit under the menu bar so they never cover the mobile dock.
+   Doubled selector beats react-toastify's own :root defaults. */
+:root:root {
+  --toastify-toast-top: calc(env(safe-area-inset-top) + 3.5rem);
+}
+.Toastify__toast-container--top-center {
+  padding: 0 0.75rem;
+}
+.Toastify__toast {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.875rem;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.875rem;
+}
 
-  .animate-slide-up {
-    animation: slideUp 0.5s ease-in-out forwards;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.01ms !important;
   }
 }

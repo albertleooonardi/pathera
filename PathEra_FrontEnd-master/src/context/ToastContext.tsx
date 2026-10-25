@@ -28,7 +28,7 @@ export const useToaster = (): ToastContextType => {
 };
 
 const toastSettings: ToastOptions = {
-  position: "bottom-right",
+  position: "top-center",
   autoClose: 4000,
   hideProgressBar: false,
   closeOnClick: true,

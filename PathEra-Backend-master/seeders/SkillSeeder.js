@@ -1,32 +1,17 @@
-import fs from "fs";
-import csv from "csv-parser";
-import db from "../Database.js";
 import Skills from "../model/Skills.js";
+import { readCSV, bulkInsert } from "./readCSV.js";
 
-const skills = [];
+export const seedSkills = async () => {
+  const rows = await readCSV("skills.csv");
+  if (!rows) return new Set();
 
-fs.createReadStream("../dataset/skills.csv")
-  .pipe(csv())
-  .on("data", (data) => {
-    skills.push({
-      skill_name: data.skills,
-    });
-  })
-  .on("end", async () => {
-    try {
-      await db.sync();
+  // Keep the CSV ids: job_skills.csv references them
+  const skills = rows.map((data) => ({
+    id: parseInt(data.id),
+    skill_name: data.skills,
+  }));
 
-      const inserted = await Skills.bulkCreate(skills, {
-        ignoreDuplicates: true,
-      });
-
-      console.log(
-        `Skills data has been successfully seeded with ${inserted.length} entries.`
-      );
-    } catch (error) {
-      console.error("Error seeding skills data:", error);
-    }
-  })
-  .on("error", (error) => {
-    console.error("Error processing the CSV file:", error);
-  });
+  await bulkInsert(Skills, skills);
+  console.log(`skills: ${skills.length} rows`);
+  return new Set(skills.map((skill) => skill.id));
+};

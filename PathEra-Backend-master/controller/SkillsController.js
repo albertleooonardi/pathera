@@ -10,6 +10,7 @@ export const showSkills = async (req, res) => {
 
     return res.status(200).json(skills);
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    console.error("Error fetching skills:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };

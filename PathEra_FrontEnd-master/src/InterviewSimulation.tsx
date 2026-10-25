@@ -6,8 +6,11 @@ import { BASE_URL } from "./config/settings";
 import { useUser } from "./context/UserContext";
 import axios from "axios";
 import { QuestionType } from "./types/QuestionType";
-import InterviewerIcon from "./assets/InterviewerIcon.png";
-import { Mic } from "lucide-react";
+import { ArrowRight, Check, Mic, RefreshCw, Square } from "lucide-react";
+import AiAvatar from "./components/AiAvatar";
+import ScoreRing from "./components/ScoreRing";
+import PageHeader from "./components/PageHeader";
+import { getScoreColor } from "./lib/utils";
 import { useMicrophone } from "./hooks/useMicrophone";
 import { Button } from "./components/ui/button";
 import useSmoothScroll from "./hooks/useSmoothScroll";
@@ -24,6 +27,7 @@ const InterviewSimulation: React.FC = () => {
   const [jobTitle, setJobTitle] = useState<string>("");
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [questions, setQuestions] = useState<QuestionType[] | null>(null);
+  const [questionsError, setQuestionsError] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [isAudioVisible, setIsAudioVisible] = useState(false);
   const [loadingTranscription, setLoadingTranscription] = useState(false);
@@ -36,6 +40,7 @@ const InterviewSimulation: React.FC = () => {
   const navigate = useNavigate();
   const [answers, setAnswers] = useState<string[]>([]);
   const [scores, setScores] = useState<number[]>([]);
+  const [feedback, setFeedback] = useState<string[]>([]);
 
   const {
     isRecording,
@@ -63,6 +68,7 @@ const InterviewSimulation: React.FC = () => {
         fetchQuestions(savedJobTitle);
       }
     } else {
+      setLoadingQuestions(false);
       setOpen(true);
     }
   }, []);
@@ -75,9 +81,17 @@ const InterviewSimulation: React.FC = () => {
   }, [audio]);
 
   const handleSelectJob = (title: string) => {
-    if (title !== jobTitle) {
+    if (title !== jobTitle || !questions) {
+      // Start a clean session so answers from another role aren't submitted.
       setJobTitle(title);
       localStorage.setItem("selectedJobTitle", title);
+      setAnswers([]);
+      setScores([]);
+      setFeedback([]);
+      setTranscription(null);
+      setCurrentScore(null);
+      setIsAudioVisible(false);
+      resetRecording();
       fetchQuestions(title);
     }
     setOpen(false);
@@ -85,6 +99,7 @@ const InterviewSimulation: React.FC = () => {
 
   const fetchQuestions = async (title: string) => {
     setLoadingQuestions(true);
+    setQuestionsError(false);
     try {
       const response = await axios.get(`${BASE_URL}/questions/${title}`);
       setQuestions(response.data);
@@ -92,6 +107,8 @@ const InterviewSimulation: React.FC = () => {
       setCurrentQuestion(0);
     } catch (error) {
       console.error("Error fetching questions:", error);
+      setQuestions(null);
+      setQuestionsError(true);
     } finally {
       setLoadingQuestions(false);
     }
@@ -107,20 +124,21 @@ const InterviewSimulation: React.FC = () => {
         reader.onloadend = () => resolve(reader.result as string);
       });
 
-      const response = await axios.post(`${BASE_URL}/transcribe`, {
-        audioData: base64data,
-      });
+      const response = await axios.post(
+        `${BASE_URL}/transcribe`,
+        { audioData: base64data },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
       const transcriptionText = response.data.text;
 
       if (transcriptionText) {
         setTranscription(transcriptionText.trim());
-        console.log("Transcription:", transcriptionText);
       } else {
-        toastError("Transcription failed. Please try again.");
+        toastError("Transcription failed. Try again or type your answer instead.");
       }
     } catch (error) {
       console.error("Error during transcription:", error);
-      toastError("Error during transcription. Please try again.");
+      toastError("Transcription failed. Try again or type your answer instead.");
     } finally {
       setLoadingTranscription(false);
       setIsAudioVisible(false);
@@ -145,6 +163,7 @@ const InterviewSimulation: React.FC = () => {
       setCurrentScore(response.data.score);
       setAnswers((prev) => [...prev, transcription || "No answer"]);
       setScores((prev) => [...prev, response.data.score]);
+      setFeedback((prev) => [...prev, response.data.feedback ?? ""]);
     } catch (error) {
       console.error("Error submitting answer:", error);
       toastError("Failed to submit answer. Please try again.");
@@ -188,19 +207,19 @@ const InterviewSimulation: React.FC = () => {
     }));
   
     const dataToSend = {
-      userId: user.id,
       jobTitle,
       answers,
       scores,
+      feedback,  // the backend requires one feedback string per answer
       questions: questionsData,  // Ensure questions is an array of objects with necessary properties
       sample_answers: questionsData.map((q) => q.sample_answer),
     };
   
     try {
       setIsSubmitting(true);
-      console.log("Request Data:", dataToSend);
-      
-      const response = await axios.post(`${BASE_URL}/save-session`, dataToSend);
+      const response = await axios.post(`${BASE_URL}/save-session`, dataToSend, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
       
       if (response.status === 200) {
         sessionStorage.removeItem("questions");
@@ -218,119 +237,189 @@ const InterviewSimulation: React.FC = () => {
   
 
 
+  const total = questions?.length || 0;
+  const pad = (n: number) => String(n).padStart(2, "0");
+
   return (
-    <MainLayout>
-      <div className="py-6 px-4 md:px-12 lg:px-24">
-        {jobTitle && (
-          <p className="text-xl md:text-2xl font-bold">
-            {jobTitle}{" "}
-            <span
-              className="text-primary text-sm font-medium cursor-pointer"
-              onClick={() => setOpen(true)}
-            >
-              Change
-            </span>
-          </p>
-        )}
-        <br />
-        <div className="flex flex-col gap-6 md:gap-8 lg:gap-12 px-4 md:px-8 lg:px-12 py-8 border border-primary rounded-xl shadow-custom-blue">
+    <MainLayout title="Interview" size="narrow">
+      <div className="container-page">
+        <PageHeader
+          eyebrow="Interview simulation"
+          title={jobTitle || "Interview practice"}
+          description="Listen to each question, answer out loud, then review your score."
+          actions={
+            jobTitle && (
+              <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+                <RefreshCw />
+                Change role
+              </Button>
+            )
+          }
+        />
+
+        <div className="mb-4 flex items-center gap-4">
           <Progress
-            value={((currentQuestion + 1) / (questions?.length || 1)) * 100}
-            className="bg-gray-200 h-3 md:h-4 lg:h-5"
+            value={((currentQuestion + 1) / (total || 1)) * 100}
+            className="flex-1"
           />
-          <div className="flex flex-col gap-4">
+          <span className="shrink-0 font-mono text-xs text-muted-foreground">
+            {pad(total ? currentQuestion + 1 : 0)} / {pad(total)}
+          </span>
+        </div>
+
+        <div className="surface relative flex min-h-[420px] flex-col overflow-hidden">
+          <div className="pointer-events-none absolute -top-24 left-1/2 h-48 w-2/3 -translate-x-1/2 rounded-full bg-sky-100/80 blur-3xl" />
+
+          <div className="relative flex flex-1 flex-col gap-5 p-4 sm:p-8">
+            {!jobTitle && !loadingQuestions && (
+              <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
+                <AiAvatar className="h-12 w-12" />
+                <p className="mt-4 font-display text-2xl">Choose a role to begin</p>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  Questions are tailored to the job you're preparing for.
+                </p>
+                <Button className="mt-6" onClick={() => setOpen(true)}>
+                  Choose role
+                </Button>
+              </div>
+            )}
+            {jobTitle && questionsError && !loadingQuestions && (
+              <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
+                <p className="font-display text-2xl">Couldn't load questions</p>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  Check your connection and try again.
+                </p>
+                <Button
+                  variant="outline"
+                  className="mt-6"
+                  onClick={() => fetchQuestions(jobTitle)}
+                >
+                  <RefreshCw />
+                  Try again
+                </Button>
+              </div>
+            )}
             <QuestionDisplay
               question={questions ? questions[currentQuestion] : undefined}
               loading={loadingQuestions}
             />
-            <div className="flex justify-end w-full">
-              <SpeechEngine
-                audio={audio}
-                transcription={transcription}
-                setTranscription={setTranscription}
-                isAudioVisible={isAudioVisible}
-                loadingTranscription={loadingTranscription}
-                onReRecord={onReRecord}
-                onFinalize={onFinalize}
-                startRecording={startRecording}
-                resetRecording={resetRecording}
-                loading={loading}
-                showScore={showScore}
-              />
-            </div>
-            <div className="flex flex-col md:flex-row gap-4 items-start w-full md:max-w-[80%]">
-              {showScore && (
-                <div
-                  className={`flex flex-grow items-start transition-all duration-300 ease-out transform ${
-                    scoreVisible
-                      ? "scale-100 opacity-100"
-                      : "scale-75 opacity-0"
-                  }`}
-                >
-                  <img
-                    src={InterviewerIcon}
-                    className="w-8 md:w-10 lg:w-12"
-                    alt="Interviewer"
-                  />
-                  <div className="ml-4 bg-gray-100 p-3 md:p-4 rounded-lg flex flex-col">
-                    <div className="flex flex-col gap-2">
-                      <p className="text-sm md:text-lg">
-                        Your answer scored {currentScore} points.
+            <SpeechEngine
+              audio={audio}
+              transcription={transcription}
+              setTranscription={setTranscription}
+              isAudioVisible={isAudioVisible}
+              loadingTranscription={loadingTranscription}
+              onReRecord={onReRecord}
+              onFinalize={onFinalize}
+              startRecording={startRecording}
+              resetRecording={resetRecording}
+              loading={loading}
+              showScore={showScore}
+            />
+            {showScore && (
+              <div
+                className={`flex items-start gap-3 transition-all duration-300 ease-out ${
+                  scoreVisible
+                    ? "translate-y-0 opacity-100"
+                    : "translate-y-2 opacity-0"
+                }`}
+              >
+                <AiAvatar />
+                <div className="max-w-[85%] flex-1 rounded-2xl rounded-tl-md border border-border bg-muted/60 p-4 sm:p-5">
+                  <div className="flex items-center gap-4">
+                    <ScoreRing value={currentScore ?? 0} size={56} />
+                    <div>
+                      <p className="eyebrow">Your score</p>
+                      <p className="mt-1 text-[15px]">
+                        Your answer scored{" "}
+                        <span className={`font-mono font-medium ${getScoreColor(currentScore ?? 0)}`}>
+                          {currentScore}
+                        </span>{" "}
+                        points.
                       </p>
-                      <p className="text-sm md:text-xl font-bold mt-2">
-                        Sample Answer
-                      </p>
-                      <p className="text-sm md:text-lg">
-                        {questions && questions[currentQuestion].sample_answer}
-                      </p>
+                      {feedback[currentQuestion] && (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {feedback[currentQuestion]}
+                        </p>
+                      )}
                     </div>
+                  </div>
+                  <div className="mt-5 border-t border-border pt-4">
+                    <p className="eyebrow mb-2">Sample answer</p>
+                    <p className="text-[15px] leading-relaxed text-muted-foreground">
+                      {questions && questions[currentQuestion].sample_answer}
+                    </p>
+                  </div>
+                  <div className="mt-5 flex justify-end">
                     {currentQuestion < questions!.length - 1 ? (
-                      <div className="flex justify-end mt-4">
-                        <Button
-                          className="px-4 py-2 bg-primary text-white rounded-md shadow-md focus:outline-none"
-                          onClick={handleNextQuestion}
-                        >
-                          Next Question
-                        </Button>
-                      </div>
+                      <Button onClick={handleNextQuestion} className="w-full sm:w-auto">
+                        Next question
+                        <ArrowRight />
+                      </Button>
+                    ) : !isSubmitting ? (
+                      <Button onClick={() => onSubmission()} className="w-full sm:w-auto">
+                        Submit answers
+                        <Check />
+                      </Button>
                     ) : (
-                      <div className="flex justify-end mt-4">
-                        {!isSubmitting ? (
-                          <Button
-                            className="px-4 py-2 bg-primary text-white rounded-md shadow-md focus:outline-none"
-                            onClick={() => onSubmission()}
-                          >
-                            Submit Answers
-                          </Button>
-                        ) : (
-                          <LoadingButton className="px-4 py-2 bg-primary text-white rounded-md active:scale-95 shadow-md focus:outline-none" />
-                        )}
-                      </div>
+                      <LoadingButton className="w-full sm:w-auto" text="Submitting..." />
                     )}
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
-          <div className="flex justify-center mt-auto">
-            {transcription === null && !loadingTranscription && (
-              <button
-                onClick={isRecording ? stopRecording : startRecording}
-                className="p-4 md:p-6 bg-primary text-white rounded-full hover:bg-primary-dark active:scale-90 focus:outline-none transition-transform duration-200 ease-in-out"
-              >
-                {isRecording ? `${remainingTime}s` : <Mic size={28} />}
-              </button>
+              </div>
             )}
           </div>
+
+          {questions && transcription === null && !loadingTranscription && (
+            <div className="relative flex flex-col items-center gap-3 border-t border-border/70 px-4 py-8">
+              <button
+                onClick={isRecording ? stopRecording : startRecording}
+                disabled={loadingQuestions || !questions}
+                aria-label={isRecording ? "Stop recording" : "Start recording"}
+                className={`relative flex h-16 w-16 items-center justify-center rounded-full transition-all duration-300 active:scale-95 disabled:opacity-40 ${
+                  isRecording
+                    ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/25"
+                    : "bg-mariner-950 text-white shadow-lg shadow-mariner-950/20 hover:bg-mariner-900"
+                }`}
+              >
+                {isRecording && (
+                  <span className="absolute inset-0 animate-pulse-ring rounded-full bg-destructive" />
+                )}
+                {isRecording ? (
+                  <Square size={20} className="relative fill-current" />
+                ) : (
+                  <Mic size={24} />
+                )}
+              </button>
+              <p className="font-mono text-xs text-muted-foreground">
+                {isRecording ? (
+                  <>
+                    <span className="text-destructive">●</span> Recording ·{" "}
+                    {remainingTime}s left
+                  </>
+                ) : (
+                  "Tap to answer"
+                )}
+              </p>
+              {!isRecording && (
+                <button
+                  type="button"
+                  onClick={() => setTranscription("")}
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  Type your answer instead
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <JobSelectionModal
+        canCancel={!!jobTitle}
         open={open}
         setOpen={setOpen}
         onSelectJob={handleSelectJob}
       />
-      <br />
-      <br />
     </MainLayout>
   );
 };

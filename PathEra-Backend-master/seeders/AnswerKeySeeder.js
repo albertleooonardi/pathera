@@ -1,30 +1,19 @@
-import fs from "fs";
-import csv from "csv-parser";
-import db from "../Database.js";
 import AnswerKey from "../model/AnswerKey.js";
+import { readCSV, bulkInsert } from "./readCSV.js";
 
-const answer_key = [];
+export const seedAnswerKey = async (questionIds) => {
+  const rows = await readCSV("answer_key.csv");
+  if (!rows) return;
 
-fs.createReadStream("../dataset/answer_key.csv")
-  .pipe(csv())
-  .on("data", (data) => {
-    answer_key.push({
-      question_id: data.question_id,
+  // The CSV has no id column; use the row number so re-seeding doesn't duplicate
+  const answerKey = rows
+    .map((data, index) => ({
+      id: index + 1,
+      question_id: parseInt(data.question_id),
       answer: data.Answer,
-    });
-  })
-  .on("end", async () => {
-    try {
-      await db.sync();
+    }))
+    .filter((row) => questionIds.has(row.question_id));
 
-      const inserted = await AnswerKey.bulkCreate(answer_key, {
-        ignoreDuplicates: true,
-      });
-
-      console.log(
-        `answer_key data has been successfully seeded with ${inserted.length} entries.`
-      );
-    } catch (error) {
-      console.error("Error seeding job_skills data:", error);
-    }
-  });
+  await bulkInsert(AnswerKey, answerKey);
+  console.log(`answer_key: ${answerKey.length} rows`);
+};

@@ -4,16 +4,22 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { PracticeSessionType } from "./types/PracticeSessionTypes";
 import { formatPostDate } from "./lib/utils";
-import { ArrowUpRight } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
-import "react-circular-progressbar/dist/styles.css";
+import { ArrowUpRight, Mic, RotateCcw, WifiOff } from "lucide-react";
+import EmptyState from "./components/EmptyState";
+import { Link, useNavigate } from "react-router-dom";
+import PageHeader from "./components/PageHeader";
+import ScoreRing from "./components/ScoreRing";
+import { Skeleton } from "./components/ui/skeleton";
+import { Button } from "./components/ui/button";
 
 const History = () => {
   const [sessions, setSessions] = useState<PracticeSessionType[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const navigate = useNavigate();
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchData = async () => {
+      setLoading(true);
+      setFailed(false);
       try {
         const response = await axios.get(`${BASE_URL}/history`, {
           headers: {
@@ -25,62 +31,79 @@ const History = () => {
         }
       } catch (error) {
         console.log(error);
+        setFailed(true);
+      } finally {
+        setLoading(false);
       }
     };
+
+  useEffect(() => {
     fetchData();
   }, []);
 
-  const getScoreColor = (score: number) => {
-    if (score < 50) return "red";
-    if (score >= 50 && score <= 80) return "#feb600";
-    return "#109932";
-  };
-
   return (
-    <MainLayout>
-      <br />
-      <br />
-      <div className="py-6 px-4 md:px-12 lg:px-24">
-        <div className="flex flex-col gap-6 px-4 md:px-8 lg:px-16 py-8 border border-primary rounded-xl shadow-custom-blue">
-          <p className="text-start text-xl md:text-2xl font-bold pl-4">
-            {`Interview Practice History`}
-          </p>
-          <div className="flex flex-col border-t border-gray-300">
-            {sessions &&
-              sessions.map((session) => (
-                <div
-                  key={session.id}
-                  onClick={() => navigate(`/results/${session.id}`)}
-                  className="group flex items-center justify-between border-b border-gray-300 pl-2 py-4 md:py-6 md:pl-4 cursor-pointer transition-all duration-500 ease-in-out md:hover:pr-6 md:hover:pl-6 hover:text-primary hover:border-primary hover:border-b-2"
-                >
-                  <p className="text-md md:text-xl lg:text-2xl">
+    <MainLayout title="History" size="narrow">
+      <div className="container-page">
+        <PageHeader
+          eyebrow="Your progress"
+          title="Practice history"
+          description="Every interview session you've completed, with its average score."
+        />
+
+        {failed ? (
+          <EmptyState
+            tone="error"
+            icon={WifiOff}
+            title="Couldn't load your history"
+            description="Check your connection and try again."
+            action={
+              <Button variant="outline" onClick={fetchData}>
+                <RotateCcw />
+                Try again
+              </Button>
+            }
+          />
+        ) : loading ? (
+          <div className="surface divide-y divide-border">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="flex items-center gap-4 p-5">
+                <Skeleton className="h-11 w-11 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-1/2" />
+                  <Skeleton className="h-3 w-1/4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : sessions && sessions.length > 0 ? (
+          <div className="surface animate-fade-up divide-y divide-border overflow-hidden">
+            {sessions.map((session) => (
+              <Link
+                key={session.id}
+                to={`/results/${session.id}`}
+                className="group flex items-center gap-4 p-4 transition-colors hover:bg-muted sm:p-5"
+              >
+                <ScoreRing value={Number(session.average_score)} size={44} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium transition-colors group-hover:text-primary">
                     {session.job_title}
                   </p>
-                  <div className="flex gap-2 items-center md:gap-4">
-                    <p className="text-md md:text-lg lg:text-xl">
-                      {formatPostDate(session.createdAt)}
-                    </p>
-                    <div className="w-8 h-8 md:w-12 md:h-12">
-                      <CircularProgressbar
-                        value={Number(session.average_score)}
-                        text={`${Number(session.average_score).toFixed(0)}%`}
-                        styles={buildStyles({
-                          textSize: "30px",
-                          textColor: "#000",
-                          pathColor: getScoreColor(session.average_score),
-                          trailColor: "#d6d6d6",
-                        })}
-                      />
-                    </div>
-                    <ArrowUpRight
-                      className="hidden sm:block text-primary transform opacity-0 -translate-x-[150%] translate-y-full transition-all duration-500 ease-in-out group-hover:opacity-100 group-hover:translate-x-0 group-hover:translate-y-0"
-                      size={32}
-                    />
-                  </div>
+                  <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                    {formatPostDate(session.createdAt)}
+                  </p>
                 </div>
-              ))}
+                <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition-all duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary" />
+              </Link>
+            ))}
           </div>
-        </div>
+        ) : (
+          <EmptyState
+            icon={Mic}
+            title="No practice sessions yet"
+            description="Complete an interview simulation to see it here."
+            action={<Button onClick={() => navigate("/interview")}>Start practicing</Button>}
+          />
+        )}
       </div>
     </MainLayout>
   );

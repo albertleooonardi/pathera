@@ -1,4 +1,3 @@
-import jwt from "jsonwebtoken";
 import PracticeSession from "../model/PracticeSession.js";
 import AnswerDetails from "../model/AnswerDetails.js";
 import Questions from "../model/Questions.js";
@@ -7,7 +6,6 @@ import { Sequelize } from "sequelize";
 export const saveSession = async (req, res) => {
   try {
     const {
-      userId,
       jobTitle,
       answers,
       scores,
@@ -31,7 +29,16 @@ export const saveSession = async (req, res) => {
       answers.length !== scores.length ||
       answers.length !== feedback.length ||
       answers.length !== questions.length ||
-      answers.length !== sample_answers.length
+      answers.length !== sample_answers.length ||
+      answers.length === 0 ||
+      typeof jobTitle !== "string" ||
+      !jobTitle.trim() ||
+      !answers.every((answer) => typeof answer === "string") ||
+      !feedback.every((item) => typeof item === "string") ||
+      !scores.every(
+        (score) => typeof score === "number" && score >= 0 && score <= 100
+      ) ||
+      !questions.every((q) => q && Number.isSafeInteger(Number(q.id)))
     ) {
       return res.status(400).json({
         error:
@@ -53,9 +60,9 @@ export const saveSession = async (req, res) => {
       });
     }
 
-    // Create new session
+    // Create new session, owned by the signed-in user rather than a client-supplied id
     const newSession = await PracticeSession.create({
-      user_id: userId,
+      user_id: req.user.id,
       job_title: jobTitle,
     });
 
@@ -68,7 +75,8 @@ export const saveSession = async (req, res) => {
       answer,
       score: scores[index],
       feedback: feedback[index],
-      sample_answer: sample_answers[index],
+      // answer_details.sample_answer is NOT NULL, but some questions have no answer key
+      sample_answer: sample_answers[index] ?? "",
     }));
 
     try {
@@ -84,65 +92,45 @@ export const saveSession = async (req, res) => {
       .json({ message: "Session saved successfully", id: sessionId });
   } catch (error) {
     console.error("Error saving practice session:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
 export const getAllSession = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ message: "Authorization header missing" });
-    }
-    const token = authHeader.split(" ")[1];
-
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-    const authenticatedUserId = decodedToken.id;
+    const authenticatedUserId = req.user.id;
 
     const sessions = await PracticeSession.findAll({
       where: { user_id: authenticatedUserId },
+      // Subquery instead of JOIN + GROUP BY: Postgres rejects ungrouped joined columns
       attributes: {
         include: [
           [
-            Sequelize.fn("AVG", Sequelize.col("answerDetails.score")),
+            Sequelize.literal(
+              `(SELECT AVG("score") FROM "answer_details" WHERE "answer_details"."practice_session_id" = "practice_sessions"."id")`
+            ),
             "average_score",
           ],
         ],
       },
-      include: {
-        model: AnswerDetails,
-        as: "answerDetails",
-        attributes: [],
-        include: {
-          model: Questions,
-          as: "question",
-          attributes: ["question"],
-        },
-      },
       order: [["createdAt", "DESC"]],
-      group: ["practice_sessions.id"],
     });
 
     return res.status(200).json(sessions);
   } catch (error) {
     console.error("Error fetching all sessions:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
 export const getSession = async (req, res) => {
   try {
     const { sessionId } = req.params;
+    const authenticatedUserId = req.user.id;
 
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ message: "Authorization header missing" });
+    if (!/^\d+$/.test(sessionId)) {
+      return res.status(404).json({ error: "Session not found" });
     }
-    console.log("Authorization Header:", authHeader);
-    const token = authHeader.split(" ")[1];
-
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-    const authenticatedUserId = decodedToken.id;
 
     const session = await PracticeSession.findOne({
       where: { id: sessionId },
@@ -155,6 +143,8 @@ export const getSession = async (req, res) => {
           attributes: ["question"],
         },
       },
+      // keep answers in the order they were given
+      order: [[{ model: AnswerDetails, as: "answerDetails" }, "id", "ASC"]],
     });
 
     if (!session) {
@@ -168,9 +158,16 @@ export const getSession = async (req, res) => {
       });
     }
 
+    // Postgres returns DECIMAL columns as strings
+    const scores = session.answerDetails.map((answer) => Number(answer.score));
     const sessionDetails = {
       userId: session.user_id,
       jobTitle: session.job_title,
+      // Results.tsx reads these two
+      averageScore: scores.length
+        ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+        : 0,
+      createdAt: session.createdAt,
       answers: session.answerDetails.map((answer) => ({
         question: answer.question.question,
         answer: answer.answer,
@@ -183,6 +180,6 @@ export const getSession = async (req, res) => {
     return res.status(200).json(sessionDetails);
   } catch (error) {
     console.error("Error fetching practice session:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };

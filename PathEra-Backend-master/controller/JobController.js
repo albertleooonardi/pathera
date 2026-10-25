@@ -4,13 +4,13 @@ import Jobs from "../model/Jobs.js";
 import Companies from "../model/Companies.js";
 import Skills from "../model/Skills.js";
 import SavedJobs from "../model/SavedJobs.js";
-import jwt from "jsonwebtoken";
-import { Sequelize } from "sequelize";
+import { getAuthenticatedUserId } from "../middleware/CheckToken.js";
+import db from "../Database.js";
 
 export const getFeaturedJobs = async (req, res) => {
   try {
     const featuredJobs = await Jobs.findAll({
-      order: Sequelize.literal("RAND()"),
+      order: db.random(),
       limit: 9,
       include: [
         {
@@ -25,7 +25,6 @@ export const getFeaturedJobs = async (req, res) => {
           "min_experience",
           "degree",
           "job_link",
-          "date_posted",
           "updatedAt",
         ],
       },
@@ -41,7 +40,6 @@ export const getFeaturedJobs = async (req, res) => {
 export const recommendJobs = async (req, res) => {
   try {
     const userData = req.body;
-    console.log("Received input from frontend:", userData);
 
     const aiResponse = await axios.post(
       "http://localhost:5020/recommend",
@@ -51,7 +49,8 @@ export const recommendJobs = async (req, res) => {
     if (aiResponse.data.success) {
       const jobRecommendations = aiResponse.data.result;
 
-      const jobIds = jobRecommendations.map((job) => job.job_id);
+      // the AI service returns each job's id as `id`
+      const jobIds = jobRecommendations.map((job) => job.id);
 
       const jobs = await Jobs.findAll({
         where: { id: jobIds },
@@ -71,9 +70,9 @@ export const recommendJobs = async (req, res) => {
       }, {});
 
       const enrichedRecommendations = jobRecommendations.map((job) => ({
-        job_id: job.job_id,
-        companyName: jobDetails[job.job_id]?.companyName || "Unknown",
-        jobTitle: jobDetails[job.job_id]?.jobTitle || "Unknown",
+        job_id: job.id,
+        companyName: jobDetails[job.id]?.companyName || "Unknown",
+        jobTitle: jobDetails[job.id]?.jobTitle || "Unknown",
         similarity: job.similarity || 0,
       }));
 
@@ -88,7 +87,7 @@ export const recommendJobs = async (req, res) => {
     }
   } catch (error) {
     console.error("Error occurred:", error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 };
 
@@ -108,7 +107,6 @@ export const showAllJobs = async (req, res) => {
           "min_experience",
           "degree",
           "job_link",
-          "date_posted",
           "updatedAt",
         ],
       },
@@ -117,7 +115,7 @@ export const showAllJobs = async (req, res) => {
     return res.status(200).json(jobs);
   } catch (error) {
     console.error("Error fetching jobs:", error.message);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
@@ -125,23 +123,14 @@ export const showJobDetail = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ message: "Authorization header missing" });
+    if (!/^\d+$/.test(id)) {
+      return res.status(404).json({ message: "Job not found" });
     }
 
-    const token = authHeader.split(" ")[1];
-    let authenticatedUserId = null;
-    let isTokenExpired = false;
+    // Job details are public; a signed-in user additionally gets their saved state
+    const authenticatedUserId = await getAuthenticatedUserId(req);
 
-    try {
-      const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-      authenticatedUserId = decodedToken.id;
-    } catch (error) {
-      isTokenExpired = true;
-    }
-
-    const savedJob = !isTokenExpired
+    const savedJob = authenticatedUserId
       ? await SavedJobs.findOne({
           where: { job_id: id, user_id: authenticatedUserId },
         })
@@ -184,9 +173,10 @@ export const showJobDetail = async (req, res) => {
       location: job.location,
       industry: job.job_industry,
       degree: job.degree,
-      createdAt: job.createdAt,
+      // null when the source listing had no posting date (createdAt is only the import time)
+      datePosted: job.date_posted,
       minExperience: job.min_experience,
-      isSaved: isTokenExpired ? false : !!savedJob,
+      isSaved: !!savedJob,
       skillsRequired: job.jobSkills.map(
         (jobSkill) => jobSkill.skill?.skill_name || "Unknown"
       ),
@@ -210,7 +200,13 @@ export const getRecommendations = async (req, res) => {
       return res.status(400).json({ error: "No job IDs provided" });
     }
 
-    const jobIdsArray = Array.isArray(ids) ? ids : ids.split(",");
+    const jobIdsArray = (Array.isArray(ids) ? ids : String(ids).split(",")).map(
+      (id) => String(id).trim()
+    );
+
+    if (!jobIdsArray.length || !jobIdsArray.every((id) => /^\d+$/.test(id))) {
+      return res.status(400).json({ error: "Job IDs must be numeric" });
+    }
 
     const jobs = await Jobs.findAll({
       where: {
@@ -229,7 +225,6 @@ export const getRecommendations = async (req, res) => {
           "min_experience",
           "degree",
           "job_link",
-          "date_posted",
           "updatedAt",
         ],
       },
@@ -238,6 +233,6 @@ export const getRecommendations = async (req, res) => {
     return res.status(200).json(jobs);
   } catch (error) {
     console.error("Error fetching jobs:", error.message);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };

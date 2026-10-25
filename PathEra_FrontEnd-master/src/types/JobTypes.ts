@@ -7,6 +7,7 @@ export type JobType = {
   location: string;
   companyId: CompanyType;
   createdAt: string;
+  date_posted: string | null;
 };
 
 export type RecommendationType = JobType & {
@@ -38,5 +39,5 @@ export type JobDetailType = {
   companyImage: string;
   isSaved: boolean;
   jobDescription: string;
-  createdAt: string;
+  datePosted: string | null;
 };

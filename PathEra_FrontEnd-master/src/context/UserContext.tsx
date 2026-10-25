@@ -12,7 +12,7 @@ const UserContext = createContext<UserContextType>([
   true,
 ]);
 
-export function UserProvider({ children }: PropsWithChildren<{}>) {
+export function UserProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<UserType | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -32,8 +32,10 @@ export function UserProvider({ children }: PropsWithChildren<{}>) {
         },
       });
       setUser(response.data);
-    } catch (error: any) {
-      if (error.response && error.response.status === 400) {
+    } catch (error: unknown) {
+      // An expired or revoked session: drop it so the user is asked to sign in again.
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      if (status === 400 || status === 401) {
         localStorage.removeItem("token");
       }
       console.log(error);

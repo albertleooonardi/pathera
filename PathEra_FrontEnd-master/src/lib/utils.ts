@@ -28,7 +28,13 @@ export function formatPostDate(createdAt: string): string {
 }
 
 export const getScoreColor = (score: number) => {
-  if (score < 50) return "text-red-500";
-  if (score >= 50 && score <= 80) return "text-[#feb600]";
-  return "text-green-500";
+  if (score < 50) return "text-destructive";
+  if (score >= 50 && score <= 80) return "text-warning";
+  return "text-success";
+};
+
+export const getScoreTone = (score: number) => {
+  if (score < 50) return "hsl(var(--destructive))";
+  if (score >= 50 && score <= 80) return "hsl(var(--warning))";
+  return "hsl(var(--success))";
 };

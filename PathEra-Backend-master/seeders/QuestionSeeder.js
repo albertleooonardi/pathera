@@ -1,31 +1,19 @@
-import fs from "fs";
-import csv from "csv-parser";
-import db from "../Database.js";
 import Questions from "../model/Questions.js";
+import { readCSV, bulkInsert } from "./readCSV.js";
 
-const questions = [];
+export const seedQuestions = async () => {
+  const rows = await readCSV("questions.csv");
+  if (!rows) return new Set();
 
-fs.createReadStream("../dataset/questions.csv")
-  .pipe(csv())
-  .on("data", (data) => {
-    questions.push({
-      question: data.Question,
-      job_title: data.JobTitle,
-      topic: data.Topic,
-    });
-  })
-  .on("end", async () => {
-    try {
-      await db.sync();
+  // Keep the CSV ids: answer_key.csv references them
+  const questions = rows.map((data) => ({
+    id: parseInt(data.id),
+    question: data.Question,
+    job_title: data.JobTitle,
+    topic: data.Topic,
+  }));
 
-      const inserted = await Questions.bulkCreate(questions, {
-        ignoreDuplicates: true,
-      });
-
-      console.log(
-        `Questions data has been successfully seeded with ${inserted.length} entries.`
-      );
-    } catch (error) {
-      console.error("Error seeding job_skills data:", error);
-    }
-  });
+  await bulkInsert(Questions, questions);
+  console.log(`questions: ${questions.length} rows`);
+  return new Set(questions.map((question) => question.id));
+};
